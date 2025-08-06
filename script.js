@@ -110,16 +110,27 @@ function renderSongList() {
             showPlayerPage();
             loadSong(songs[currentSongIndex]);
             playTrack();
+            
+            // Force video to play after a short delay
+            setTimeout(() => {
+                backgroundVideo.play()
+                    .catch(e => console.log("Video play error:", e));
+            }, 100);
         });
         songListElement.appendChild(li);
     });
 }
 
-// Show player page and video background
 function showPlayerPage() {
     homePage.classList.remove('active');
     playerPage.classList.add('active');
+    
+    // Ensure video is visible and playing
     backgroundVideoContainer.classList.add('active');
+    if (backgroundVideo.src) {
+        backgroundVideo.play()
+            .catch(e => console.log("Video play error:", e));
+    }
 }
 
 // Hide player page and video background
@@ -132,21 +143,24 @@ function showHomePage() {
     backgroundVideoContainer.classList.remove('active');
 }
 
-// Load song into player and set video background
 function loadSong(song) {
     albumArtPlayer.src = song.albumArtUrl;
     playerTrackTitle.textContent = song.title;
     playerTrackArtist.textContent = song.artist;
     audioPlayer.src = song.audioSrc;
-    
-    // Update video background
-    if (song.videoBgSrc) {
-        backgroundVideo.src = song.videoBgSrc;
-        backgroundVideo.load();
-        backgroundVideo.play().catch(e => console.log("Video autoplay prevented:", e));
-    }
-    
     renderLyrics(song.lyrics);
+
+    // Reset video state
+    backgroundVideo.pause();
+    backgroundVideo.src = song.videoBgSrc;
+    backgroundVideo.load();
+
+    backgroundVideoContainer.classList.add('active');
+    setTimeout(() => {
+        backgroundVideo.play()
+            .catch(e => console.log("Video play error:", e));
+    }, 100);
+
     audioPlayer.onloadedmetadata = () => {
         playerTotalDuration.textContent = formatTime(audioPlayer.duration);
     };
@@ -174,12 +188,14 @@ function renderLyrics(lyrics) {
 function playTrack() {
     isPlaying = true;
     audioPlayer.play();
-    backgroundVideo.play();
+    // Ensure video plays when music starts
+    backgroundVideo.play().catch(e => console.log("Video playback error:", e));
     updatePlayPauseIcon();
 }
 function pauseTrack() {
     isPlaying = false;
     audioPlayer.pause();
+    // Pause video when music pauses
     backgroundVideo.pause();
     updatePlayPauseIcon();
 }
