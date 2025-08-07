@@ -37,8 +37,8 @@ const songs = [
         audioSrc: "audio/letdown.mp3",
         videoBgSrc: "videos/letdown.mp4",
         lyrics: [
-            { time: 0.2  ,  text: "Floor collapsing Floating" },
-            { time: 5,  text: "bouncing back and " },
+            { time: 0.2, text: "Floor collapsing Floating" },
+            { time: 5, text: "bouncing back and " },
             { time: 7, text: "One day, I am gonna grow wings" },
             { time: 14.2, text: "A chemical reaction" },
             { time: 17.9, text: "Hysterical and useless" },
@@ -46,6 +46,29 @@ const songs = [
             { time: 26, text: "Let down and hanging around" },
             { time: 33, text: "Crushed like a bug in the ground" },
             { time: 40, text: "Let down and hanging around" }
+        ]
+    },
+    {
+        id: 3,
+        title: "Cherry Waves",
+        artist: "Deftones",
+        album: "Sunday Night Wrist",
+        albumArtUrl: "https://is1-ssl.mzstatic.com/image/thumb/Music/14/fb/a8/mzi.fyjrjjzn.jpg/600x600bf-60.jpg",
+        audioSrc: "audio/cherrywaves.mp3",
+        videoBgSrc: "videos/cherrywaves.mp4",
+        lyrics: [
+            { time: 0.8, text: "The waves" },
+            { time: 4, text: "SUCKKKKKKKKKKKKKKKKKKK" },
+            { time: 9, text: "You in" },
+            { time: 11, text: "Then you drown" },
+            { time: 15, text: "If like" },
+            { time: 16, text: "You, oh, oh ,ohh" },
+            { time: 19, text: "Should sink, down beneath" },
+            { time: 26, text: "I'll swim down" },
+            { time: 32, text: "With you" },
+            { time: 35, text: "Is that what you want" },
+            { time: 40, text: "You" },
+            { time: 43, text: "Is that what you want..." },
         ]
     }
 ];
@@ -105,17 +128,18 @@ function renderSongList() {
             backgroundVideo.src = "";
             backgroundVideoContainer.classList.remove('active');
         });
+        // ADD DELAY HERE ON SONG CLICK
         li.addEventListener('click', () => {
             currentSongIndex = idx;
             showPlayerPage();
-            loadSong(songs[currentSongIndex]);
-            playTrack();
-            
-            // Force video to play after a short delay
             setTimeout(() => {
-                backgroundVideo.play()
-                    .catch(e => console.log("Video play error:", e));
-            }, 100);
+                loadSong(songs[currentSongIndex]);
+                playTrack();
+                setTimeout(() => {
+                    backgroundVideo.play()
+                        .catch(e => console.log("Video play error:", e));
+                }, 100);
+            }, 200);  // 200ms delay before loading/playing
         });
         songListElement.appendChild(li);
     });
@@ -124,8 +148,6 @@ function renderSongList() {
 function showPlayerPage() {
     homePage.classList.remove('active');
     playerPage.classList.add('active');
-    
-    // Ensure video is visible and playing
     backgroundVideoContainer.classList.add('active');
     if (backgroundVideo.src) {
         backgroundVideo.play()
@@ -133,7 +155,6 @@ function showPlayerPage() {
     }
 }
 
-// Hide player page and video background
 function showHomePage() {
     playerPage.classList.remove('active');
     homePage.classList.add('active');
@@ -150,11 +171,10 @@ function loadSong(song) {
     audioPlayer.src = song.audioSrc;
     renderLyrics(song.lyrics);
 
-    // Reset video state
+    // Video
     backgroundVideo.pause();
     backgroundVideo.src = song.videoBgSrc;
     backgroundVideo.load();
-
     backgroundVideoContainer.classList.add('active');
     setTimeout(() => {
         backgroundVideo.play()
@@ -168,7 +188,6 @@ function loadSong(song) {
     playerProgressBar.style.width = "0%";
 }
 
-// Render lyrics
 function renderLyrics(lyrics) {
     lyricsContainer.innerHTML = '';
     if (!lyrics || lyrics.length === 0) {
@@ -184,18 +203,15 @@ function renderLyrics(lyrics) {
     });
 }
 
-// Play/pause logic
 function playTrack() {
     isPlaying = true;
     audioPlayer.play();
-    // Ensure video plays when music starts
     backgroundVideo.play().catch(e => console.log("Video playback error:", e));
     updatePlayPauseIcon();
 }
 function pauseTrack() {
     isPlaying = false;
     audioPlayer.pause();
-    // Pause video when music pauses
     backgroundVideo.pause();
     updatePlayPauseIcon();
 }
@@ -212,7 +228,6 @@ audioPlayer.addEventListener('timeupdate', () => {
         playerProgressBar.style.width = percent + "%";
         playerCurrentTime.textContent = formatTime(audioPlayer.currentTime);
 
-        // Highlight lyrics
         const currentTime = audioPlayer.currentTime;
         const lyricLines = lyricsContainer.querySelectorAll('.lyric-line');
         let highlightedLine = null;
@@ -246,71 +261,59 @@ playerProgressBarContainer.addEventListener('click', (e) => {
 playerPlayPauseBtn.addEventListener('click', () => {
     isPlaying ? pauseTrack() : playTrack();
 });
-playerPrevBtn.addEventListener('click', () => {
-    if (currentSongIndex > 0) {
-        currentSongIndex--;
-    } else {
-        currentSongIndex = songs.length - 1;  // Loop to last song
-    }
-    loadSong(songs[currentSongIndex]);
-    playTrack();
-});
-playerNextBtn.addEventListener('click', () => {
-    if (currentSongIndex < songs.length - 1) {
-        currentSongIndex++;
-    } else {
-        currentSongIndex = 0;  // Loop back to first song
-    }
-    loadSong(songs[currentSongIndex]);
-    playTrack();
-});
 backToHomeBtn.addEventListener('click', showHomePage);
 
-// Set initial speed display and value
-document.addEventListener('DOMContentLoaded', () => {
-    renderSongList();
-    if (playerSpeedSlider && audioPlayer) {
-        audioPlayer.playbackRate = parseFloat(playerSpeedSlider.value);
-        currentSpeedDisplay.textContent = playerSpeedSlider.value + "x";
+playerNextBtn.addEventListener('click', () => {
+    if (repeatMode === 1) {
+        audioPlayer.currentTime = 0;
+        playTrack();
+        return;
     }
-    if (playerVolumeSlider && audioPlayer) {
-        audioPlayer.volume = parseFloat(playerVolumeSlider.value);
+    if (isShuffle) {
+        let nextIndex;
+        do {
+            nextIndex = Math.floor(Math.random() * songs.length);
+        } while (nextIndex === currentSongIndex && songs.length > 1);
+        currentSongIndex = nextIndex;
+    } else {
+        currentSongIndex = (currentSongIndex + 1) % songs.length;
     }
+    loadSong(songs[currentSongIndex]);
+    playTrack();
 });
 
-// Playback speed control
-if (playerSpeedSlider && audioPlayer) {
-    playerSpeedSlider.addEventListener('input', (e) => {
-        const speed = parseFloat(e.target.value);
-        audioPlayer.playbackRate = speed;
-        currentSpeedDisplay.textContent = speed + "x";
-    });
-}
+playerPrevBtn.addEventListener('click', () => {
+    if (repeatMode === 1) {
+        audioPlayer.currentTime = 0;
+        playTrack();
+        return;
+    }
+    if (isShuffle) {
+        let prevIndex;
+        do {
+            prevIndex = Math.floor(Math.random() * songs.length);
+        } while (prevIndex === currentSongIndex && songs.length > 1);
+        currentSongIndex = prevIndex;
+    } else {
+        currentSongIndex = (currentSongIndex - 1 + songs.length) % songs.length;
+    }
+    loadSong(songs[currentSongIndex]);
+    playTrack();
+});
 
-// Volume control
-if (playerVolumeSlider && audioPlayer) {
-    playerVolumeSlider.addEventListener('input', (e) => {
-        const vol = parseFloat(e.target.value);
-        audioPlayer.volume = vol;
-    });
-}
-
-// Shuffle button logic
+// Shuffle & Repeat button logic
 if (playerShuffleBtn) {
     playerShuffleBtn.addEventListener('click', () => {
         isShuffle = !isShuffle;
         playerShuffleBtn.classList.toggle('active-feature', isShuffle);
     });
 }
-
-// Repeat button logic
 if (playerRepeatBtn) {
     playerRepeatBtn.addEventListener('click', () => {
         repeatMode = repeatMode === 0 ? 1 : 0;
         updateRepeatButtonUI();
     });
 }
-
 function updateRepeatButtonUI() {
     playerRepeatBtn.classList.remove('active-feature');
     audioPlayer.loop = false;
@@ -323,100 +326,26 @@ function updateRepeatButtonUI() {
     }
 }
 
-// Add this CSS to your style.css for the "repeat one" badge:
-/*
-#playerRepeatBtn[data-repeat-one="1"] i::after {
-    content: "1";
-    font-size: 0.6em;
-    position: absolute;
-    top: 0.45em;
-    right: 0.5em;
-    color: #fff;
-    background: #380056;
-    border-radius: 50%;
-    width: 1em;
-    height: 1em;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+// Volume & Speed controls
+if (playerSpeedSlider && audioPlayer) {
+    playerSpeedSlider.addEventListener('input', (e) => {
+        const speed = parseFloat(e.target.value);
+        audioPlayer.playbackRate = speed;
+        currentSpeedDisplay.textContent = speed + "x";
+    });
 }
-#playerRepeatBtn {
-    position: relative;
-}
-*/
-
-// Next/Prev logic with shuffle/repeat
-playerNextBtn.addEventListener('click', () => {
-    // If repeat is active (repeatMode === 1), stay on current song
-    if (repeatMode === 1) {
-        audioPlayer.currentTime = 0;
-        playTrack();
-        return;
-    }
-    
-    // Otherwise go to next song
-    currentSongIndex = (currentSongIndex + 1) % songs.length;
-    loadSong(songs[currentSongIndex]);
-    playTrack();
-});
-
-playerPrevBtn.addEventListener('click', () => {
-    // If repeat is active, restart current song
-    if (repeatMode === 1) {
-        audioPlayer.currentTime = 0;
-        playTrack();
-        return;
-    }
-    
-    // Otherwise go to previous song
-    currentSongIndex = (currentSongIndex - 1 + songs.length) % songs.length;
-    loadSong(songs[currentSongIndex]);
-    playTrack();
-});
-
-function nextSong() {
-    currentSongIndex = (currentSongIndex + 1) % songs.length;
-    const nextSong = songs[currentSongIndex];
-    loadSong(nextSong);
-    playTrack();
-    updateUI();
+if (playerVolumeSlider && audioPlayer) {
+    playerVolumeSlider.addEventListener('input', (e) => {
+        const vol = parseFloat(e.target.value);
+        audioPlayer.volume = vol;
+    });
 }
 
-function previousSong() {
-    currentSongIndex = (currentSongIndex - 1 + songs.length) % songs.length;
-    const prevSong = songs[currentSongIndex];
-    loadSong(prevSong);
-    playTrack();
-    updateUI();
-}
-
-function updateUI() {
-    // Update player info
-    playerTrackTitle.textContent = songs[currentSongIndex].title;
-    playerTrackArtist.textContent = songs[currentSongIndex].artist;
-    albumArtPlayer.src = songs[currentSongIndex].albumArtUrl;
-    
-    // Update video background
-    backgroundVideo.src = songs[currentSongIndex].videoBgSrc;
-    backgroundVideo.load();
-    backgroundVideo.play().catch(e => console.log("Video autoplay prevented:", e));
-}
-
-// Update button event listeners
-playerNextBtn.addEventListener('click', nextSong);
-playerPrevBtn.addEventListener('click', previousSong);
-
-// Also handle auto-play next song when current song ends
+// Auto-play next song when current ends
 audioPlayer.addEventListener('ended', () => {
-    if (!audioPlayer.loop) {  // Only go to next if not in repeat-one mode
-        nextSong();
+    if (!audioPlayer.loop) {
+        playerNextBtn.click();
     }
-});
-
-// Initialize repeat button UI on load
-document.addEventListener('DOMContentLoaded', () => {
-    renderSongList();
-    updateRepeatButtonUI();
 });
 
 // Utility
@@ -429,4 +358,12 @@ function formatTime(seconds) {
 // Init
 document.addEventListener('DOMContentLoaded', () => {
     renderSongList();
+    updateRepeatButtonUI();
+    if (playerSpeedSlider && audioPlayer) {
+        audioPlayer.playbackRate = parseFloat(playerSpeedSlider.value);
+        currentSpeedDisplay.textContent = playerSpeedSlider.value + "x";
+    }
+    if (playerVolumeSlider && audioPlayer) {
+        audioPlayer.volume = parseFloat(playerVolumeSlider.value);
+    }
 });
