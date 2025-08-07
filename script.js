@@ -299,18 +299,34 @@ function updatePlayPauseIcon() {
 
 function prevTrack() {
     if (songs.length === 0) return;
-    if (isShuffle) {
+
+    if (repeatMode === 1) {
+        // Repeat the current song
+        audioPlayer.currentTime = 0;
+        audioPlayer.play();
+    } else if (isShuffle) {
+        // Play a random song
         playRandomTrack();
     } else {
-        currentSongIndex = (currentSongIndex - 1 + songs.length) % songs.length;
+        // Play the previous song
+        currentSongIndex--;
+        if (currentSongIndex < 0) {
+            currentSongIndex = 0;
+        }
+        loadSong(songs[currentSongIndex]);
+        playTrack();
     }
-    loadSong(songs[currentSongIndex]);
-    playTrack();
     showPlayerPage(); // Update video background
 }
 
 function nextTrackLogic() {
     if (songs.length === 0) return;
+
+    if (repeatMode === 1) {
+        // Do nothing, stay on the current song
+        return;
+    }
+
     if (isShuffle) {
         playRandomTrack();
     } else {
@@ -324,21 +340,39 @@ function nextTrackLogic() {
 function nextTrack() {
     if (songs.length === 0) return;
 
-    if (repeatMode === 1 && audioPlayer.ended) {
-        // Handled by audio.loop = true
+    if (repeatMode === 1) {
+        // Repeat the current song
+        audioPlayer.currentTime = 0;
+        audioPlayer.play();
     } else if (isShuffle) {
+        // Play a random song
         playRandomTrack();
     } else {
-        currentSongIndex++;
-        if (currentSongIndex >= songs.length) {
+        // Play the next song, wrapping around to the start if necessary
+        currentSongIndex = (currentSongIndex + 1) % songs.length;
+        loadSong(songs[currentSongIndex]);
+        playTrack();
+    }
+    showPlayerPage(); // Update video background
+}
+
+function prevTrack() {
+    if (songs.length === 0) return;
+
+    if (repeatMode === 1) {
+        // Do nothing, stay on the current song
+        return;
+    }
+
+    if (isShuffle) {
+        playRandomTrack();
+    } else {
+        currentSongIndex--;
+        if (currentSongIndex < 0) {
             if (repeatMode === 2) {
-                currentSongIndex = 0;
-            } else {
                 currentSongIndex = songs.length - 1;
-                loadSong(songs[currentSongIndex]);
-                pauseTrack();
-                audioPlayer.currentTime = audioPlayer.duration;
-                return;
+            } else {
+                currentSongIndex = 0;
             }
         }
         loadSong(songs[currentSongIndex]);
@@ -439,24 +473,19 @@ playerShuffleBtn.addEventListener('click', () => {
 });
 
 playerRepeatBtn.addEventListener('click', () => {
-    repeatMode = (repeatMode + 1) % 3;
+    repeatMode = (repeatMode + 1) % 3; // cycle through 0, 1, 2
     updateRepeatButtonUI();
-    console.log("Repeat Mode: " + repeatMode);
 });
 
 function updateRepeatButtonUI() {
     playerRepeatBtn.classList.remove('active-feature');
+    playerRepeatBtn.removeAttribute('data-repeat-one');
     audioPlayer.loop = false;
 
-    if (repeatMode === 0) {
-        playerRepeatBtn.innerHTML = '<i class="fas fa-repeat"></i>';
-    } else if (repeatMode === 1) {
-        playerRepeatBtn.innerHTML = '<i class="fas fa-repeat-1"></i>';
+    if (repeatMode === 1) {
         playerRepeatBtn.classList.add('active-feature');
+        playerRepeatBtn.setAttribute('data-repeat-one', '1');
         audioPlayer.loop = true;
-    } else if (repeatMode === 2) {
-        playerRepeatBtn.innerHTML = '<i class="fas fa-repeat"></i>';
-        playerRepeatBtn.classList.add('active-feature');
     }
 }
 
@@ -468,11 +497,13 @@ playerPlayPauseBtn.addEventListener('click', () => {
     }
 });
 playerPrevBtn.addEventListener('click', prevTrack);
-playerNextBtn.addEventListener('click', nextTrackLogic);
+playerNextBtn.addEventListener('click', nextTrack);
+
 
 audioPlayer.addEventListener('ended', () => {
-    if (repeatMode === 1) {
-        // Handled by audio.loop = true
+    if (repeatMode === 1 || repeatMode === 2) {
+        audioPlayer.currentTime = 0;
+        audioPlayer.play();
     } else {
         nextTrack();
     }
