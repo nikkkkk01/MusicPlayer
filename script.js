@@ -75,6 +75,8 @@ const songs = [
 
 let currentSongIndex = 0;
 let isPlaying = false;
+let videoIsReady = false;
+let videoPlayAttempts = 0;
 
 // DOM Elements
 const songListElement = document.getElementById('songList');
@@ -104,7 +106,25 @@ const playerShuffleBtn = document.getElementById('playerShuffleBtn');
 let isShuffle = false;
 let repeatMode = 0; // 0: off, 1: repeat one
 
-// Render song list
+function isMobileDevice() {
+    return /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+}
+
+// Set up video container with correct styles
+function initializeVideoContainer() {
+    backgroundVideoContainer.style.position = 'fixed';
+    backgroundVideoContainer.style.top = '0';
+    backgroundVideoContainer.style.left = '0';
+    backgroundVideoContainer.style.width = '100%';
+    backgroundVideoContainer.style.height = '100%';
+    backgroundVideoContainer.style.zIndex = '0';
+    
+    backgroundVideo.style.position = 'absolute';
+    backgroundVideo.style.width = '100%';
+    backgroundVideo.style.height = '100%';
+    backgroundVideo.style.objectFit = 'cover';
+}
+
 function renderSongList() {
     songListElement.innerHTML = '';
     songs.forEach((song, idx) => {
@@ -116,43 +136,175 @@ function renderSongList() {
                 <p style="margin:0;font-size:0.85rem;color:#b3b3b3;">${song.artist}</p>
             </div>
         `;
-        // Show video background on hover (no music)
+        
+        // Preview on hover (mobile or desktop)
         li.addEventListener('mouseenter', () => {
             backgroundVideo.src = song.videoBgSrc;
             backgroundVideoContainer.classList.add('active');
             backgroundVideo.load();
+            backgroundVideo.muted = true;
             backgroundVideo.play().catch(() => {});
         });
+        
         li.addEventListener('mouseleave', () => {
-            backgroundVideo.pause();
-            backgroundVideo.src = "";
-            backgroundVideoContainer.classList.remove('active');
+            if (!isPlaying) {
+                backgroundVideo.pause();
+                backgroundVideo.src = "";
+                backgroundVideoContainer.classList.remove('active');
+            }
         });
-        // ADD DELAY HERE ON SONG CLICK
-        li.addEventListener('click', () => {
+
+        // Track selection handling - prevent double clicks
+        let activated = false;
+        function selectSong(e, isTouchEvent) {
+            if (activated) return;
+            activated = true;
+            e.preventDefault();
+            
+            // Store selected song index
             currentSongIndex = idx;
+            
+            // Switch to player page first
             showPlayerPage();
-            setTimeout(() => {
-                loadSong(songs[currentSongIndex]);
-                playTrack();
-                setTimeout(() => {
-                    backgroundVideo.play()
-                        .catch(e => console.log("Video play error:", e));
-                }, 100);
-            }, 200);  // 200ms delay before loading/playing
-        });
+            
+            // Then prepare media (with different logic for mobile vs desktop)
+            prepareAndPlayMedia(isTouchEvent);
+            
+            // Reset activation flag after a delay
+            setTimeout(() => activated = false, 800);
+        }
+        
+        // Add both event types with correct handling
+        li.addEventListener('click', e => selectSong(e, false));
+        li.addEventListener('touchstart', e => selectSong(e, true), {passive: false});
+
         songListElement.appendChild(li);
     });
+}
+
+// Core function to prepare and play media properly
+function prepareAndPlayMedia(isMobile) {
+    // Reset video state
+    videoIsReady = false;
+    videoPlayAttempts = 0;
+    
+    // Get the current song
+    const song = songs[currentSongIndex];
+    
+    // Setup UI elements
+    albumArtPlayer.src = song.albumArtUrl;
+    playerTrackTitle.textContent = song.title;
+    playerTrackArtist.textContent = song.artist;
+    renderLyrics(song.lyrics);
+    
+    // Reset progress indicators
+    playerCurrentTime.textContent = "0:00";
+    playerProgressBar.style.width = "0%";
+    
+    // Make video container visible FIRST
+    backgroundVideoContainer.style.display = 'block';
+    backgroundVideoContainer.classList.add('active');
+
+    // Set up audio source
+    audioPlayer.src = song.audioSrc;
+    
+    // Set up video source
+    backgroundVideo.src = song.videoBgSrc;
+    backgroundVideo.muted = true; // Required for autoplay on many browsers
+    backgroundVideo.setAttribute('playsinline', '');
+    backgroundVideo.setAttribute('webkit-playsinline', '');
+    
+    // Load both media
+    audioPlayer.load();
+    backgroundVideo.load();
+    
+    // Set up handlers for when media is ready
+    audioPlayer.onloadedmetadata = () => {
+        playerTotalDuration.textContent = formatTime(audioPlayer.duration);
+    };
+    
+    // When video can play, flag it
+    backgroundVideo.oncanplay = function() {
+        console.log("Video is ready to play");
+        videoIsReady = true;
+    };
+    
+    // Handle different play strategies based on device
+    if (isMobile) {
+        // Mobile: Play immediately
+        playBothMediaWithSync(0);
+    } else {
+        // Desktop: Use a delay with multiple attempts
+        playBothMediaWithSync(400);
+    }
+}
+
+// Function to attempt playing both media with sync
+function playBothMediaWithSync(delay) {
+    setTimeout(() => {
+        // Start audio first (more reliable)
+        audioPlayer.play()
+            .then(() => {
+                console.log("Audio started successfully");
+                isPlaying = true;
+                updatePlayPauseIcon();
+                
+                // Then attempt video
+                tryPlayingVideo();
+            })
+            .catch(err => {
+                console.error("Audio play failed:", err);
+                // If audio fails, try again with user interaction
+                isPlaying = false;
+                updatePlayPauseIcon();
+            });
+    }, delay);
+}
+
+// Function to try playing video with multiple attempts
+function tryPlayingVideo() {
+    // If we've tried too many times, stop
+    if (videoPlayAttempts >= 3) {
+        console.log("Maximum video play attempts reached");
+        return;
+    }
+    
+    videoPlayAttempts++;
+    console.log(`Video play attempt #${videoPlayAttempts}`);
+    
+    // Force video element to be visible
+    backgroundVideo.style.display = 'block';
+    backgroundVideoContainer.style.display = 'block';
+    backgroundVideoContainer.classList.add('active');
+    
+    // Wait a short time and try to play
+    setTimeout(() => {
+        backgroundVideo.play()
+            .then(() => {
+                console.log("Video started successfully");
+                // Ensure video is properly synced with audio
+                if (Math.abs(backgroundVideo.currentTime - audioPlayer.currentTime) > 0.3) {
+                    backgroundVideo.currentTime = audioPlayer.currentTime;
+                }
+            })
+            .catch(err => {
+                console.error("Video play failed:", err);
+                
+                // Try again after a short delay
+                setTimeout(() => {
+                    tryPlayingVideo();
+                }, 300);
+            });
+    }, 200);
 }
 
 function showPlayerPage() {
     homePage.classList.remove('active');
     playerPage.classList.add('active');
+    
+    // Ensure video container is visible
+    backgroundVideoContainer.style.display = 'block';
     backgroundVideoContainer.classList.add('active');
-    if (backgroundVideo.src) {
-        backgroundVideo.play()
-            .catch(e => console.log("Video play error:", e));
-    }
 }
 
 function showHomePage() {
@@ -162,30 +314,7 @@ function showHomePage() {
     backgroundVideo.pause();
     backgroundVideo.src = "";
     backgroundVideoContainer.classList.remove('active');
-}
-
-function loadSong(song) {
-    albumArtPlayer.src = song.albumArtUrl;
-    playerTrackTitle.textContent = song.title;
-    playerTrackArtist.textContent = song.artist;
-    audioPlayer.src = song.audioSrc;
-    renderLyrics(song.lyrics);
-
-    // Video
-    backgroundVideo.pause();
-    backgroundVideo.src = song.videoBgSrc;
-    backgroundVideo.load();
-    backgroundVideoContainer.classList.add('active');
-    setTimeout(() => {
-        backgroundVideo.play()
-            .catch(e => console.log("Video play error:", e));
-    }, 100);
-
-    audioPlayer.onloadedmetadata = () => {
-        playerTotalDuration.textContent = formatTime(audioPlayer.duration);
-    };
-    playerCurrentTime.textContent = "0:00";
-    playerProgressBar.style.width = "0%";
+    backgroundVideoContainer.style.display = 'none';
 }
 
 function renderLyrics(lyrics) {
@@ -205,29 +334,60 @@ function renderLyrics(lyrics) {
 
 function playTrack() {
     isPlaying = true;
-    audioPlayer.play();
-    backgroundVideo.play().catch(e => console.log("Video playback error:", e));
+    
+    // Try to play audio first
+    audioPlayer.play()
+        .then(() => {
+            // If video is also loaded, play it and sync
+            if (videoIsReady) {
+                backgroundVideo.currentTime = audioPlayer.currentTime;
+                backgroundVideo.play().catch(e => console.log("Video play error:", e));
+            } else {
+                // Video not ready, try again later
+                tryPlayingVideo();
+            }
+        })
+        .catch(e => console.log("Audio play error:", e));
+    
     updatePlayPauseIcon();
 }
+
 function pauseTrack() {
     isPlaying = false;
     audioPlayer.pause();
     backgroundVideo.pause();
     updatePlayPauseIcon();
 }
+
 function updatePlayPauseIcon() {
     playerPlayPauseBtn.innerHTML = isPlaying
         ? '<i class="fas fa-pause"></i>'
         : '<i class="fas fa-play"></i>';
 }
 
-// Progress bar and lyrics sync
+// Sync video with audio if they drift apart
+function syncVideoWithAudio() {
+    if (isPlaying && videoIsReady && backgroundVideo.readyState >= 2) {
+        // If video and audio are more than 0.3 seconds out of sync
+        if (Math.abs(backgroundVideo.currentTime - audioPlayer.currentTime) > 0.3) {
+            backgroundVideo.currentTime = audioPlayer.currentTime;
+        }
+    }
+}
+
+// Update UI with current time and sync lyrics
 audioPlayer.addEventListener('timeupdate', () => {
     if (audioPlayer.duration) {
         const percent = (audioPlayer.currentTime / audioPlayer.duration) * 100;
         playerProgressBar.style.width = percent + "%";
         playerCurrentTime.textContent = formatTime(audioPlayer.currentTime);
 
+        // Sync video with audio periodically
+        if (audioPlayer.currentTime % 5 < 0.1) { // Every ~5 seconds
+            syncVideoWithAudio();
+        }
+
+        // Update lyrics highlighting
         const currentTime = audioPlayer.currentTime;
         const lyricLines = lyricsContainer.querySelectorAll('.lyric-line');
         let highlightedLine = null;
@@ -249,26 +409,40 @@ audioPlayer.addEventListener('timeupdate', () => {
     }
 });
 
-// Progress bar seek
+// Allow seeking in the song
 playerProgressBarContainer.addEventListener('click', (e) => {
     if (!audioPlayer.duration) return;
     const width = playerProgressBarContainer.clientWidth;
     const clickX = e.offsetX;
-    audioPlayer.currentTime = (clickX / width) * audioPlayer.duration;
+    const newTime = (clickX / width) * audioPlayer.duration;
+    
+    // Update both audio and video time
+    audioPlayer.currentTime = newTime;
+    if (videoIsReady) {
+        backgroundVideo.currentTime = newTime;
+    }
 });
 
-// Player controls
+// Play/pause button
 playerPlayPauseBtn.addEventListener('click', () => {
     isPlaying ? pauseTrack() : playTrack();
 });
+
+// Back button
 backToHomeBtn.addEventListener('click', showHomePage);
 
+// Next track button
 playerNextBtn.addEventListener('click', () => {
     if (repeatMode === 1) {
         audioPlayer.currentTime = 0;
+        if (videoIsReady) {
+            backgroundVideo.currentTime = 0;
+        }
         playTrack();
         return;
     }
+    
+    // Get next track index
     if (isShuffle) {
         let nextIndex;
         do {
@@ -278,16 +452,23 @@ playerNextBtn.addEventListener('click', () => {
     } else {
         currentSongIndex = (currentSongIndex + 1) % songs.length;
     }
-    loadSong(songs[currentSongIndex]);
-    playTrack();
+    
+    // Prepare and play new media
+    prepareAndPlayMedia(isMobileDevice());
 });
 
+// Previous track button
 playerPrevBtn.addEventListener('click', () => {
     if (repeatMode === 1) {
         audioPlayer.currentTime = 0;
+        if (videoIsReady) {
+            backgroundVideo.currentTime = 0;
+        }
         playTrack();
         return;
     }
+    
+    // Get previous track index
     if (isShuffle) {
         let prevIndex;
         do {
@@ -297,23 +478,27 @@ playerPrevBtn.addEventListener('click', () => {
     } else {
         currentSongIndex = (currentSongIndex - 1 + songs.length) % songs.length;
     }
-    loadSong(songs[currentSongIndex]);
-    playTrack();
+    
+    // Prepare and play new media
+    prepareAndPlayMedia(isMobileDevice());
 });
 
-// Shuffle & Repeat button logic
+// Shuffle button
 if (playerShuffleBtn) {
     playerShuffleBtn.addEventListener('click', () => {
         isShuffle = !isShuffle;
         playerShuffleBtn.classList.toggle('active-feature', isShuffle);
     });
 }
+
+// Repeat button
 if (playerRepeatBtn) {
     playerRepeatBtn.addEventListener('click', () => {
         repeatMode = repeatMode === 0 ? 1 : 0;
         updateRepeatButtonUI();
     });
 }
+
 function updateRepeatButtonUI() {
     playerRepeatBtn.classList.remove('active-feature');
     audioPlayer.loop = false;
@@ -326,7 +511,7 @@ function updateRepeatButtonUI() {
     }
 }
 
-// Volume & Speed controls
+// Speed control
 if (playerSpeedSlider && audioPlayer) {
     playerSpeedSlider.addEventListener('input', (e) => {
         const speed = parseFloat(e.target.value);
@@ -334,6 +519,8 @@ if (playerSpeedSlider && audioPlayer) {
         currentSpeedDisplay.textContent = speed + "x";
     });
 }
+
+// Volume control
 if (playerVolumeSlider && audioPlayer) {
     playerVolumeSlider.addEventListener('input', (e) => {
         const vol = parseFloat(e.target.value);
@@ -341,28 +528,38 @@ if (playerVolumeSlider && audioPlayer) {
     });
 }
 
-// Auto-play next song when current ends
+// Handle end of track
 audioPlayer.addEventListener('ended', () => {
     if (!audioPlayer.loop) {
         playerNextBtn.click();
     }
 });
 
-// Utility
+// Utility function to format time
 function formatTime(seconds) {
     const m = Math.floor(seconds / 60);
     const s = Math.floor(seconds % 60);
     return `${m}:${s < 10 ? '0' : ''}${s}`;
 }
 
-// Init
+// Initialize the player
 document.addEventListener('DOMContentLoaded', () => {
+    // Set up video container
+    initializeVideoContainer();
+    
+    // Load song list
     renderSongList();
+    
+    // Initialize UI
     updateRepeatButtonUI();
+    
+    // Set initial speed if control exists
     if (playerSpeedSlider && audioPlayer) {
         audioPlayer.playbackRate = parseFloat(playerSpeedSlider.value);
         currentSpeedDisplay.textContent = playerSpeedSlider.value + "x";
     }
+    
+    // Set initial volume if control exists
     if (playerVolumeSlider && audioPlayer) {
         audioPlayer.volume = parseFloat(playerVolumeSlider.value);
     }
